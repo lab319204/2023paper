@@ -54,7 +54,7 @@ base_data <- base_data %>% select(where(~ any(!is.na(.))))
 
 
 base_data <- base_data %>%
-  mutate(Combined_Column = paste0(base_data[[1]], " ", base_data[[2]])) %>%
+  mutate(Combined_Column = paste0(base_data[[1]], "_", base_data[[2]])) %>%
   select(-c(1,2, 3, 4, 5))  # 删除原及第3、4、5列
 
 base_data <-  base_data %>% select(Combined_Column, everything())
