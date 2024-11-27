@@ -5,19 +5,53 @@ import json
 import time
 from datetime import datetime
 import os
-from material import welcome,questions
+import base64
+from material import welcome,reading_material
 
+# 设置页面布局模式为宽屏
+st.set_page_config(layout="wide")
 # 定义检查姓名是否为2或3个汉字的函数
 def is_valid_name(name):
     return bool(re.fullmatch(r'^[\u4e00-\u9fa5]{2,3}$', name))
-
+# 添加对话气泡自定义 CSS 样式
+st.markdown(
+    """
+    <style>
+    .chat-container {
+        font-family: Arial, sans-serif;
+        margin: 10px 0;
+        padding: 10px;
+        border-radius: 10px;
+        max-width: 80%;
+    }
+    .user {
+        background-color: #E8F5E9;  /* 用户消息背景色 */
+        text-align: left;
+        margin-left: 10px;
+        margin-right: auto;
+    }
+    .assistant {
+        background-color: #C8E6C9;  /* GPT 消息背景色 */
+        text-align: left;
+        margin-left: 10px;
+        margin-right: auto;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 # 定于显示完整对话历史的函数
 def display_chat():
     h = 550 # 文本框高度
     with messages_placeholder.container(height=h):
         for message in st.session_state.history:
             with st.chat_message(message['role']):
-                st.markdown(f"{message['content']}")
+                st.markdown(f"""
+                            <div class="chat-container {message['role']}">
+                            {message['content']}
+                            </div>
+                            """,
+                            unsafe_allow_html=True,)
 # 定义获取gpts回复和显示对话的函数
 def get_response(input_text):
     st.session_state.history.append({"role": "user", "content": input_text})# 记录用户输入
@@ -56,7 +90,7 @@ def get_response(input_text):
 # 定义导出对话历史文件的函数
 def chat2file():
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    file_name = f"{st.session_state.user_name}_{timestamp}.txt"# 用时间戳和学生姓名命名对话记录文件
+    file_name = f"{st.session_state.class_name}_{st.session_state.user_name}_{timestamp}.txt"# 用时间戳和学生班级姓名命名对话记录文件
     folder_path = "chat_history"# 保存文件夹
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
@@ -68,13 +102,12 @@ def chat2file():
                 f.write(f"{msg['role']}: {msg['content']}\n")
             f.write("\n")
             
-# 设置页面布局模式为宽屏
-st.set_page_config(layout="wide")
+
 # 设置标题和欢迎内容
 st.title("阅读小测试")
 
 # 设置调用的gpts编号和中转密钥
-models = ['gpt-4-gizmo-g-It3OK1ksb']
+models = ['gpt-4-gizmo-g-It3OK1ksb','gpt-4-gizmo-g-67444cd74bcc819191e2c511b9a897ce']
 headers = {
     "Authorization": "Bearer sk-yF53eKUK0CpyVTnxIAXifrkEg2I0Yff18En9GwAfpsDo7luC"
 }
@@ -87,6 +120,9 @@ if "current_question_index" not in st.session_state:
 # 对话历史
 if 'history' not in st.session_state or not st.session_state.history:
     st.session_state.history = []
+# 学生班级
+if 'class_name' not in st.session_state:
+    st.session_state.class_name = ""
 # 学生姓名
 if 'user_name' not in st.session_state:
     st.session_state.user_name = ""
@@ -97,23 +133,47 @@ if 'first' not in st.session_state:
 # 显示欢迎界面
 if not st.session_state.user_name:
     st.markdown(welcome)
-    user_name = st.chat_input("请输入你的姓名")
-    if user_name:
-        if is_valid_name(user_name):
-            st.session_state.user_name = user_name
-            st.rerun()
-        else:
-            st.error("姓名必须为2到3个汉字，请重新输入。")
+    class_name = st.text_input("请在下面输入你的班级")
+    user_name = st.text_input("请在下面输入你的姓名")
+    if st.button("提交"):
+        if not class_name:
+            st.error("请输入你的班级")
+        if user_name:
+            if is_valid_name(user_name):
+                st.session_state.user_name = user_name
+                st.rerun()
+            else:
+                st.error("姓名必须为2到3个汉字，请重新输入。")
     st.stop()
 # 进入测试界面，左栏显示阅读材料，右栏为对话区域
-col1, col2= st.columns([1,1])
+col1, col2= st.columns([1.35,1])
 
 with col1:
     h = 550
-    messages_placeholder = st.empty()
-    with messages_placeholder.container(height=h):
-        question = questions[st.session_state.current_question_index]
-        st.markdown(question, unsafe_allow_html=True)
+    # PDF 文件路径
+    pdf_file_path = reading_material[st.session_state.current_question_index]
+
+    # 将 PDF 文件转换为 Base64 格式
+    with open(pdf_file_path, "rb") as f:
+        base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+
+    # 嵌入 PDF 文件
+    st.markdown(
+        f"""
+        <style>
+        iframe {{
+            background-color: #F1F8E9;  /* 替换为你主题的背景颜色 */
+            border: none;
+            width: 100%;
+            height: 550px;
+        }}
+        </style>
+        <iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="550" type="application/pdf"></iframe>
+        """,
+        unsafe_allow_html=True,
+    )
+    #question = reading_material[st.session_state.current_question_index]
+    #st.markdown(question, unsafe_allow_html=True)
 
 with col2:
     messages_placeholder = st.empty()
@@ -128,7 +188,7 @@ with col2:
     if input_text:
         get_response(input_text)
    
-    last_question = (st.session_state.current_question_index == len(questions) - 1)
+    last_question = (st.session_state.current_question_index == len(reading_material) - 1)
     button_label = "完成考试" if last_question else "下一题"
     if st.button(button_label):
         st.session_state.all_history.append(st.session_state.history)# 点击下一题后将当前材料的对话记录保存到所有对话历史中
@@ -138,7 +198,8 @@ with col2:
             st.success("考试完成！聊天记录已保存到文件。")
         else:
             st.session_state.current_question_index += 1
-            get_response(f"你好，我是{st.session_state.user_name}")# 重新发送打招呼消息
-            #st.rerun()
+            st.session_state.first = True
+            st.rerun()
+
             
     st.markdown('<div class="custom-button"></div>', unsafe_allow_html=True)
