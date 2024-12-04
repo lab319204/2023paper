@@ -97,11 +97,12 @@ def chat2file():
     file_path = os.path.join(folder_path, file_name)
     with open(file_path, 'w') as f:
         for idx, history in enumerate(st.session_state.all_history):
-            f.write(f"题目{idx + 1}的聊天记录:\n")
+            f.write(f"阅读材料{idx + 1}的聊天记录:\n")
             for msg in history:
                 f.write(f"{msg['role']}: {msg['content']}\n")
             f.write("\n")
-            
+
+        
 
 # 设置标题和欢迎内容
 st.title("阅读小测试")
@@ -129,6 +130,9 @@ if 'user_name' not in st.session_state:
 # 第一次打招呼  
 if 'first' not in st.session_state:
     st.session_state.first = True
+# 二次确认
+if "show_confirmation" not in st.session_state:
+    st.session_state.show_confirmation = False
     
 # 显示欢迎界面
 if not st.session_state.user_name:
@@ -189,17 +193,31 @@ with col2:
         get_response(input_text)
    
     last_question = (st.session_state.current_question_index == len(reading_material) - 1)
-    button_label = "完成考试" if last_question else "下一题"
+    button_label = "完成测试" if last_question else "进入下一篇阅读材料"
     if st.button(button_label):
-        st.session_state.all_history.append(st.session_state.history)# 点击下一题后将当前材料的对话记录保存到所有对话历史中
-        st.session_state.history = []# 清空当前对话记录
-        if last_question:
-            chat2file()# 导出对话历史文件
-            st.success("考试完成！聊天记录已保存到文件。")
-        else:
-            st.session_state.current_question_index += 1
-            st.session_state.first = True
-            st.rerun()
+        st.session_state.show_confirmation = True
+        
+    if st.session_state.show_confirmation:
+        st.warning("确定要进入下一篇阅读材料或完成测试吗？点击确认后你将无法返回当前阅读材料的测试，请确保完成当前阅读材料的测试后再点击确认。")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("确认"):
+                st.session_state.show_confirmation = False
+                st.session_state.all_history.append(st.session_state.history)# 点击下一题后将当前材料的对话记录保存到所有对话历史中
+                st.session_state.history = []# 清空当前对话记录
+                if last_question:
+                    chat2file()# 导出对话历史文件
+                    st.success("考试完成！聊天记录已保存到文件。")
+                else:
+                    st.session_state.current_question_index += 1
+                    st.session_state.first = True
+                    st.rerun()
+                
+        with col2:
+            if st.button("取消"):
+                st.session_state.show_confirmation = False
+                st.rerun()
+
 
             
     st.markdown('<div class="custom-button"></div>', unsafe_allow_html=True)
