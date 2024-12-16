@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 import os
 import base64
-from material import welcome,reading_material
+from material import welcome_1,reading_material
 
 # 设置页面布局模式为宽屏
 st.set_page_config(layout="wide")
@@ -105,7 +105,7 @@ def chat2file():
         
 
 # 设置标题和欢迎内容
-st.title("阅读小测试")
+# st.title("阅读小测试")
 
 # 设置调用的gpts编号和中转密钥
 models = ['gpt-4-gizmo-g-It3OK1ksb','gpt-4-gizmo-g-67444cd74bcc819191e2c511b9a897ce']
@@ -135,16 +135,24 @@ if "show_confirmation" not in st.session_state:
     st.session_state.show_confirmation = False
     
 # 显示欢迎界面
-if not st.session_state.user_name:
-    st.markdown(welcome)
-    class_name = st.text_input("请在下面输入你的班级")
-    user_name = st.text_input("请在下面输入你的姓名")
+if not (st.session_state.class_name and st.session_state.user_name):
+    st.markdown("<h1 style='text-align: center;'>💬阅读小测试</h1>", unsafe_allow_html=True,)
+    st.info(welcome_1)
+    col1, col2 = st.columns([1,1])
+    with col1:
+        class_name = st.selectbox("请选择你的班级", ["1班", "2班", "3班"])
+    with col2:
+        user_name = st.text_input("请在下面输入你的姓名")
+    
     if st.button("提交"):
         if not class_name:
             st.error("请输入你的班级")
-        if user_name:
+        if not user_name:
+            st.error("请输入你的姓名")
+        if class_name and user_name:
             if is_valid_name(user_name):
                 st.session_state.user_name = user_name
+                st.session_state.class_name = class_name
                 st.rerun()
             else:
                 st.error("姓名必须为2到3个汉字，请重新输入。")
