@@ -1,0 +1,469 @@
+---
+title: '12.31'
+author: "颜云依"
+date: "2024-12-31"
+output: html_document
+---
+
+
+```{r}
+
+rm(list = ls())
+
+install.packages("haven")
+library(haven)
+library(dplyr)
+
+```
+
+2010:
+
+```{r}
+cfps2010 <- read_dta("D:\\研究生\\毕设\\[CFPS+Public+Data]+CFPS+2010_in_STATA_(Chinese)\\[CFPS Public Data] CFPS 2010 in Stata (Chinese)\\cfps2010adult_202008.dta")
+
+cfps2010$edu  <-  cfps2010$cfps2010eduy_best
+cfps2010$age <- cfps2010$qa1age
+cfps2010$health  <- cfps2010$qp3
+
+cfps2010 <- cfps2010 %>%
+  mutate(health = case_when(
+    health == 1 ~ 5,
+    health == 2 ~ 4,
+    health == 3 ~ 3,
+    health == 4 ~ 2,
+    health == 5 ~ 1,
+    TRUE ~ health # 保留其他未列出的值
+  ))
+
+
+  
+cfps2010 <- cfps2010 %>%
+  mutate(period = 2010)
+
+# 在 cfps2010 数据中创建 cohort 列，基于 2010 - qa1age 计算出生年份，并分组
+cfps2010 <- cfps2010 %>%
+  mutate(cohort = case_when(
+    (2010 - age) <= 1909 ~ "1909以前",
+    (2010 - age) >= 1910 & (2010 - age) <= 1914 ~ "1910-1914",
+    (2010 - age) >= 1915 & (2010 - age) <= 1919 ~ "1915-1919",
+    (2010 - age) >= 1920 & (2010 - age) <= 1924 ~ "1920-1924",
+    (2010 - age) >= 1925 & (2010 - age) <= 1929 ~ "1925-1929",
+    (2010 - age) >= 1930 & (2010 - age) <= 1934 ~ "1930-1934",
+    (2010 - age) >= 1935 & (2010 - age) <= 1939 ~ "1935-1939",
+    (2010 - age) >= 1940 & (2010 - age) <= 1944 ~ "1940-1944",
+    (2010 - age) >= 1945 & (2010 - age) <= 1949 ~ "1945-1949",
+    (2010 - age) >= 1950 & (2010 - age) <= 1954 ~ "1950-1954",
+    (2010 - age) >= 1955 & (2010 - age) <= 1959 ~ "1955-1959",
+    (2010 - age) >= 1960 & (2010 - age) <= 1964 ~ "1960-1964",
+    (2010 - age) >= 1965 & (2010 - age) <= 1969 ~ "1965-1969",
+    (2010 - age) >= 1970 & (2010 - age) <= 1974 ~ "1970-1974",
+    (2010 - age) >= 1975 & (2010 - age) <= 1979 ~ "1975-1979",
+    (2010 - age) >= 1980 & (2010 - age) <= 1984 ~ "1980-1984",
+    (2010 - age) >= 1985 & (2010 - age) <= 1989 ~ "1985-1989",
+    (2010 - age) >= 1990 & (2010 - age) <= 1994 ~ "1990-1994",
+    (2010 - age) >= 1995 & (2010 - age) <= 1999 ~ "1995-1999",
+    (2010 - age) >= 2000 & (2010 - age) <= 2004 ~ "2000-2004",
+    TRUE ~ NA_character_
+  ))
+
+
+```
+
+
+
+2012:
+
+```{r}
+
+cfps2012 <- read_dta("D:\\研究生\\毕设\\[CFPS+Public+Data]+CFPS+2012+in+STATA+(Chinese)\\[CFPS Public Data] CFPS2012 in STATA (Chinese)\\cfps2012adult_201906.dta")
+
+cfps2012$age <- cfps2012$qv201b
+cfps2012$health  <- cfps2012$qp201
+cfps2012$edu  <-  cfps2012$eduy2012
+cfps2012$gender <- cfps2012$cfps2012_gender_best
+
+cfps2012 <- cfps2012 %>%
+  mutate(health = case_when(
+    health == 1 ~ 5,
+    health == 2 ~ 4,
+    health == 3 ~ 3,
+    health == 4 ~ 2,
+    health == 5 ~ 1,
+    TRUE ~ health # 保留其他未列出的值
+  ))
+
+
+cfps2012 <- cfps2012 %>%
+  mutate(period = 2012)
+
+
+
+#age缺失值太多，于是从cfps2010中填补相同pid的年龄+2
+
+# 过滤出 cfps2012 中 age 列为 -8, -2, -1 或 NA 的行
+cfps2012_filtered <- cfps2012 %>%
+  filter(age %in% c(-8, -2, -1) | is.na(age))
+
+# 对 cfps2010 中的 age 列加 2
+cfps2010_updated <- cfps2010 %>%
+  mutate(age = age + 2) %>%
+  select(pid, age)  # 保留 pid 和更新后的 age 列
+
+# 进行左连接，查找 cfps2010 中更新后的 age，填充到 cfps2012 的 age 缺失部分
+cfps2012_updated <- cfps2012_filtered %>%
+  left_join(cfps2010_updated, by = "pid") %>%
+  mutate(age = ifelse(is.na(age.x), age.y, age.x)) %>%
+  select(-age.x, -age.y)  # 移除临时的 age.x 和 age.y 列
+
+# 将更新后的数据合并回 cfps2012
+cfps2012_final <- cfps2012 %>%
+  filter(!(age %in% c(-8, -2, -1) | is.na(age))) %>%
+  bind_rows(cfps2012_updated)
+
+##还是缺失8000个左右
+
+
+
+# 创建 cohort 列
+cfps2012 <- cfps2012 %>%
+  mutate(birth_year = 2012 - age,  # 计算出生年份
+         cohort = case_when(
+           birth_year < 1910 ~ "1909年以前",
+           birth_year >= 1910 & birth_year <= 1914 ~ "1910-1914",
+           birth_year >= 1915 & birth_year <= 1919 ~ "1915-1919",
+           birth_year >= 1920 & birth_year <= 1924 ~ "1920-1924",
+           birth_year >= 1925 & birth_year <= 1929 ~ "1925-1929",
+           birth_year >= 1930 & birth_year <= 1934 ~ "1930-1934",
+           birth_year >= 1935 & birth_year <= 1939 ~ "1935-1939",
+           birth_year >= 1940 & birth_year <= 1944 ~ "1940-1944",
+           birth_year >= 1945 & birth_year <= 1949 ~ "1945-1949",
+           birth_year >= 1950 & birth_year <= 1954 ~ "1950-1954",
+           birth_year >= 1955 & birth_year <= 1959 ~ "1955-1959",
+           birth_year >= 1960 & birth_year <= 1964 ~ "1960-1964",
+           birth_year >= 1965 & birth_year <= 1969 ~ "1965-1969",
+           birth_year >= 1970 & birth_year <= 1974 ~ "1970-1974",
+           birth_year >= 1975 & birth_year <= 1979 ~ "1975-1979",
+           birth_year >= 1980 & birth_year <= 1984 ~ "1980-1984",
+           birth_year >= 1985 & birth_year <= 1989 ~ "1985-1989",
+           birth_year >= 1990 & birth_year <= 1994 ~ "1990-1994",
+           TRUE ~ NA_character_  # 处理未分类的情况
+         )) %>%
+  select(-birth_year)  # 如果不需要保留 birth_year 列，可以选择删除
+
+```
+
+
+2014:
+
+```{r}
+ 
+cfps2014 <- read_dta("D:\\研究生\\毕设\\[CFPS+Public+Data]+CFPS+2014+in+STATA+(Chinese)\\[CFPS Public Data] CFPS2014 in STATA (Chinese)\\cfps2014adult_201906.dta")   
+
+cfps2014$health <- cfps2014$qp201
+cfps2014$age <- cfps2014$cfps2014_age
+cfps2014$edu <- cfps2014$cfps2014eduy
+cfps2014$gender <- cfps2014$cfps_gender
+
+cfps2014 <- cfps2014 %>%
+  mutate(health = case_when(
+    health == 1 ~ 5,
+    health == 2 ~ 4,
+    health == 3 ~ 3,
+    health == 4 ~ 2,
+    health == 5 ~ 1,
+    TRUE ~ health # 保留其他未列出的值
+  ))
+
+
+cfps2014 <- cfps2014 %>%
+  mutate(period = 2014)
+
+
+# 创建 cohort 列
+cfps2014 <- cfps2014 %>%
+  mutate(birth_year = 2014 - age,  # 计算出生年份
+         cohort = case_when(
+           birth_year < 1910 ~ "1909年以前",
+           birth_year >= 1910 & birth_year <= 1914 ~ "1910-1914",
+           birth_year >= 1915 & birth_year <= 1919 ~ "1915-1919",
+           birth_year >= 1920 & birth_year <= 1924 ~ "1920-1924",
+           birth_year >= 1925 & birth_year <= 1929 ~ "1925-1929",
+           birth_year >= 1930 & birth_year <= 1934 ~ "1930-1934",
+           birth_year >= 1935 & birth_year <= 1939 ~ "1935-1939",
+           birth_year >= 1940 & birth_year <= 1944 ~ "1940-1944",
+           birth_year >= 1945 & birth_year <= 1949 ~ "1945-1949",
+           birth_year >= 1950 & birth_year <= 1954 ~ "1950-1954",
+           birth_year >= 1955 & birth_year <= 1959 ~ "1955-1959",
+           birth_year >= 1960 & birth_year <= 1964 ~ "1960-1964",
+           birth_year >= 1965 & birth_year <= 1969 ~ "1965-1969",
+           birth_year >= 1970 & birth_year <= 1974 ~ "1970-1974",
+           birth_year >= 1975 & birth_year <= 1979 ~ "1975-1979",
+           birth_year >= 1980 & birth_year <= 1984 ~ "1980-1984",
+           birth_year >= 1985 & birth_year <= 1989 ~ "1985-1989",
+           birth_year >= 1990 & birth_year <= 1994 ~ "1990-1994",
+           birth_year >= 1995 & birth_year <= 1999 ~ "1995-1999",
+           birth_year >= 2000 & birth_year <= 2005 ~ "2000-2005",
+           TRUE ~ NA_character_  # 处理未分类的情况
+         )) %>%
+  select(-birth_year)  # 如果不需要保留 birth_year 列，可以选择删除
+
+
+
+
+```
+
+
+2016:
+
+```{r}
+  
+cfps2016 <- read_dta("D:\\研究生\\毕设\\[CFPS+Public+Data]+CFPS+2016+in+STATA+(Chinese)\\[CFPS Public Data] CFPS2016 in STATA (Chinese)\\cfps2016adult_201906.dta")
+  
+cfps2016$health <- cfps2016$qp201
+cfps2016$age <- cfps2016$cfps_age
+cfps2016$edu  <- cfps2016$cfps2016edu
+cfps2016$gender <- cfps2016$cfps_gender
+
+cfps2016 <- cfps2016 %>%
+  mutate(health = case_when(
+    health == 1 ~ 5,
+    health == 2 ~ 4,
+    health == 3 ~ 3,
+    health == 4 ~ 2,
+    health == 5 ~ 1,
+    TRUE ~ health # 保留其他未列出的值
+  ))
+
+cfps2016 <- cfps2016 %>%
+  mutate(period = 2016)
+
+cfps2016 <- cfps2016 %>%
+  mutate(edu = case_when(
+    edu == 1 ~ 0,
+    edu == 2 ~ 6,
+    edu == 3 ~ 9,
+    edu == 4 ~ 12,
+    edu == 5 ~ 15,
+    edu == 6 ~ 16,
+    edu == 7 ~ 19,
+    edu == 8 ~ 22,
+    TRUE ~ edu # 保留其他未列出的值
+  ))
+
+
+# 创建 cohort 列
+cfps2016 <- cfps2016 %>%
+  mutate(birth_year = 2016 - age,  # 计算出生年份
+         cohort = case_when(
+           birth_year < 1910 ~ "1909年以前",
+           birth_year >= 1910 & birth_year <= 1914 ~ "1910-1914",
+           birth_year >= 1915 & birth_year <= 1919 ~ "1915-1919",
+           birth_year >= 1920 & birth_year <= 1924 ~ "1920-1924",
+           birth_year >= 1925 & birth_year <= 1929 ~ "1925-1929",
+           birth_year >= 1930 & birth_year <= 1934 ~ "1930-1934",
+           birth_year >= 1935 & birth_year <= 1939 ~ "1935-1939",
+           birth_year >= 1940 & birth_year <= 1944 ~ "1940-1944",
+           birth_year >= 1945 & birth_year <= 1949 ~ "1945-1949",
+           birth_year >= 1950 & birth_year <= 1954 ~ "1950-1954",
+           birth_year >= 1955 & birth_year <= 1959 ~ "1955-1959",
+           birth_year >= 1960 & birth_year <= 1964 ~ "1960-1964",
+           birth_year >= 1965 & birth_year <= 1969 ~ "1965-1969",
+           birth_year >= 1970 & birth_year <= 1974 ~ "1970-1974",
+           birth_year >= 1975 & birth_year <= 1979 ~ "1975-1979",
+           birth_year >= 1980 & birth_year <= 1984 ~ "1980-1984",
+           birth_year >= 1985 & birth_year <= 1989 ~ "1985-1989",
+           birth_year >= 1990 & birth_year <= 1994 ~ "1990-1994",
+           birth_year >= 1995 & birth_year <= 1999 ~ "1995-1999",
+           birth_year >= 2000 & birth_year <= 2004 ~ "2000-2004",
+           birth_year >= 2005 & birth_year <= 2009 ~ "2005-2009",
+           TRUE ~ NA_character_  # 处理未分类的情况
+         )) %>%
+  select(-birth_year)  # 如果不需要保留 birth_year 列，可以选择删除
+
+##edu的缺失值有点多
+
+
+```
+
+
+2018：
+
+```{r}
+
+cfps2018 <- read_dta("D:\\研究生\\毕设\\CFPS\\CFPS数据和调查问卷\\数据\\2018\\cfps2018person_201911.dta")
+
+cfps2018$health <- cfps2018$qp201
+cfps2018 <- cfps2018 %>%
+  mutate(health = case_when(
+    health == 1 ~ 5,
+    health == 2 ~ 4,
+    health == 3 ~ 3,
+    health == 4 ~ 2,
+    health == 5 ~ 1,
+    TRUE ~ health # 保留其他未列出的值
+  ))
+
+cfps2018$edu <- cfps2018$cfps2018edu
+cfps2018 <- cfps2018 %>%
+  mutate(edu = case_when(
+    edu == 1 ~ 0,
+    edu == 2 ~ 6,
+    edu == 3 ~ 9,
+    edu == 4 ~ 12,
+    edu == 5 ~ 15,
+    edu == 6 ~ 16,
+    edu == 7 ~ 19,
+    edu == 8 ~ 22,
+    TRUE ~ edu # 保留其他未列出的值
+  ))
+
+cfps2018 <- cfps2018 %>%
+  mutate(period = 2018)
+
+# 创建 cohort 列
+cfps2018 <- cfps2018 %>%
+  mutate(birth_year = 2018 - age,  # 计算出生年份
+         cohort = case_when(
+           birth_year < 1910 ~ "1909年以前",
+           birth_year >= 1910 & birth_year <= 1914 ~ "1910-1914",
+           birth_year >= 1915 & birth_year <= 1919 ~ "1915-1919",
+           birth_year >= 1920 & birth_year <= 1924 ~ "1920-1924",
+           birth_year >= 1925 & birth_year <= 1929 ~ "1925-1929",
+           birth_year >= 1930 & birth_year <= 1934 ~ "1930-1934",
+           birth_year >= 1935 & birth_year <= 1939 ~ "1935-1939",
+           birth_year >= 1940 & birth_year <= 1944 ~ "1940-1944",
+           birth_year >= 1945 & birth_year <= 1949 ~ "1945-1949",
+           birth_year >= 1950 & birth_year <= 1954 ~ "1950-1954",
+           birth_year >= 1955 & birth_year <= 1959 ~ "1955-1959",
+           birth_year >= 1960 & birth_year <= 1964 ~ "1960-1964",
+           birth_year >= 1965 & birth_year <= 1969 ~ "1965-1969",
+           birth_year >= 1970 & birth_year <= 1974 ~ "1970-1974",
+           birth_year >= 1975 & birth_year <= 1979 ~ "1975-1979",
+           birth_year >= 1980 & birth_year <= 1984 ~ "1980-1984",
+           birth_year >= 1985 & birth_year <= 1989 ~ "1985-1989",
+           birth_year >= 1990 & birth_year <= 1994 ~ "1990-1994",
+           birth_year >= 1995 & birth_year <= 1999 ~ "1995-1999",
+           birth_year >= 2000 & birth_year <= 2004 ~ "2000-2004",
+           birth_year >= 2005 & birth_year <= 2009 ~ "2005-2009",
+           TRUE ~ NA_character_  # 处理未分类的情况
+         )) %>%
+  select(-birth_year)  # 如果不需要保留 birth_year 列，可以选择删除
+```
+
+
+
+
+2020:
+
+```{r}
+cfps2020 <- read_dta("D:\\研究生\\毕设\\CFPS\\[CFPS+Public+Data]+CFPS+2020_in_STATA_(Chinese)\\cfps2020person_202306.dta")
+
+cfps2020$health  <- cfps2020$qp201
+cfps2020 <- cfps2020 %>%
+  mutate(health = case_when(
+    health == 1 ~ 5,
+    health == 2 ~ 4,
+    health == 3 ~ 3,
+    health == 4 ~ 2,
+    health == 5 ~ 1,
+    TRUE ~ health # 保留其他未列出的值
+  ))
+
+cfps2020 <- cfps2020 %>%
+  mutate(period = 2020)
+
+
+cfps2020 <- cfps2020 %>%
+  mutate(cfps2020eduy = case_when(
+    cfps2020eduy == -9 & cfps2020edu == 1 ~ 0,
+    cfps2020eduy == -9 & cfps2020edu == 2 ~ 6,
+    cfps2020eduy == -9 & cfps2020edu == 3 ~ 9,
+    cfps2020eduy == -9 & cfps2020edu == 4 ~ 12,
+    cfps2020eduy == -9 & cfps2020edu == 5 ~ 15,
+    cfps2020eduy == -9 & cfps2020edu == 6 ~ 16,
+    cfps2020eduy == -9 & cfps2020edu == -9 ~ -9,
+    TRUE ~ cfps2020eduy  # 保留其他不符合条件的原始值
+  ))
+
+cfps2020$edu  <-  cfps2020$cfps2020eduy
+
+
+# 创建 cohort 列
+cfps2020 <- cfps2020 %>%
+  mutate(birth_year = 2020 - age,  # 计算出生年份
+         cohort = case_when(
+           birth_year < 1910 ~ "1909年以前",
+           birth_year >= 1910 & birth_year <= 1914 ~ "1910-1914",
+           birth_year >= 1915 & birth_year <= 1919 ~ "1915-1919",
+           birth_year >= 1920 & birth_year <= 1924 ~ "1920-1924",
+           birth_year >= 1925 & birth_year <= 1929 ~ "1925-1929",
+           birth_year >= 1930 & birth_year <= 1934 ~ "1930-1934",
+           birth_year >= 1935 & birth_year <= 1939 ~ "1935-1939",
+           birth_year >= 1940 & birth_year <= 1944 ~ "1940-1944",
+           birth_year >= 1945 & birth_year <= 1949 ~ "1945-1949",
+           birth_year >= 1950 & birth_year <= 1954 ~ "1950-1954",
+           birth_year >= 1955 & birth_year <= 1959 ~ "1955-1959",
+           birth_year >= 1960 & birth_year <= 1964 ~ "1960-1964",
+           birth_year >= 1965 & birth_year <= 1969 ~ "1965-1969",
+           birth_year >= 1970 & birth_year <= 1974 ~ "1970-1974",
+           birth_year >= 1975 & birth_year <= 1979 ~ "1975-1979",
+           birth_year >= 1980 & birth_year <= 1984 ~ "1980-1984",
+           birth_year >= 1985 & birth_year <= 1989 ~ "1985-1989",
+           birth_year >= 1990 & birth_year <= 1994 ~ "1990-1994",
+           birth_year >= 1995 & birth_year <= 1999 ~ "1995-1999",
+           birth_year >= 2000 & birth_year <= 2004 ~ "2000-2004",
+           birth_year >= 2005 & birth_year <= 2009 ~ "2005-2009",
+           birth_year >= 2010 & birth_year <= 2014 ~ "2010-2014",
+           TRUE ~ NA_character_  # 处理未分类的情况
+         )) %>%
+  select(-birth_year)  # 如果不需要保留 birth_year 列，可以选择删除
+
+```
+
+
+制成年龄时期队列数据框：
+
+```{r}
+library(dplyr)
+library(haven)
+
+
+# 确保所有数据框的 health 列为 numeric
+cfps2010$health <- as.numeric(cfps2010$health)
+cfps2012$health <- as.numeric(cfps2012$health)
+cfps2014$health <- as.numeric(cfps2014$health)
+cfps2016$health <- as.numeric(cfps2016$health)
+cfps2018$health <- as.numeric(cfps2018$health)
+cfps2020$health <- as.numeric(cfps2020$health)
+
+# 合并所有数据框并保留最新年份数据
+apc <- bind_rows(
+  cfps2010[, c("pid", "age", "gender", "health", "edu", "period", "cohort")],
+  cfps2012[, c("pid", "age", "gender", "health", "edu", "period", "cohort")],
+  cfps2014[, c("pid", "age", "gender", "health", "edu", "period", "cohort")],
+  cfps2016[, c("pid", "age", "gender", "health", "edu", "period", "cohort")],
+  cfps2018[, c("pid", "age", "gender", "health", "edu", "period", "cohort")],
+  cfps2020[, c("pid", "age", "gender", "health", "edu", "period", "cohort")]
+) %>%
+  arrange(pid, desc(period)) %>%  # 按 pid 和年份降序排列
+  distinct(pid, .keep_all = TRUE)  # 保留最新年份的 pid 数据
+
+
+
+
+```
+
+
+
+
+```{r}
+
+install.packages("writexl")
+library(writexl)
+
+write_xlsx(apc, "D:\\研究生\\毕设\\结果\\apc20250103.xlsx")
+
+
+
+```
+
