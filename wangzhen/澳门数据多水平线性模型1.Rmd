@@ -1,0 +1,425 @@
+---
+title: "创造性思维1"
+author: "王振"
+date: "2025-01-25"
+output: html_document
+---
+
+
+1.各个学校样本量太小，多水平线性模型不能完全实现；
+2.做模型比较之前要，要对缺失值进行处理；
+3.变量之间存在线性关系。
+
+```{r 读取学生和创造性思维文件}
+library(foreign)
+ 
+# 定义文件路径
+file1_path <- "C:\\Users\\王振\\Desktop\\CY08MSP_STU_QQQ副本.SAV"
+file2_path <- "C:\\Users\\王振\\Desktop\\CY08MSP_CRT_COG副本.SAV"
+ 
+# 读取SPSS文件
+data1 <- read.spss(file1_path, to.data.frame = TRUE)  # to.data.frame = TRUE 是默认的，但可以明确写出
+data2 <- read.spss(file2_path, to.data.frame = TRUE)
+ 
+```
+
+
+```{r 读取教师与学校数据}
+library(foreign)
+ 
+# 定义文件路径（请根据你的实际情况修改这些路径）
+file3_path <- "C:\\Users\\王振\\Desktop\\CY08MSP_TCH_QQQ.SAV"
+file4_path <- "C:\\Users\\王振\\Desktop\\CY08MSP_SCH_QQQ副本.SAV"
+ 
+# 读取SPSS文件
+data3 <- read.spss(file3_path, to.data.frame = TRUE)  # to.data.frame = TRUE 是默认的，但可以明确写出
+data4 <- read.spss(file4_path, to.data.frame = TRUE)
+ 
+```
+
+
+```{r 合并学生与创造性思维数据}
+library(dplyr)  
+# 确保 CNTSTUID 在 data1 和 data2 中存在  
+if ("CNTSTUID" %in% names(data1) & "CNTSTUID" %in% names(data2)) {  
+  
+    # 提取 data2 中的 CNTSTUID 值  
+    cntstuid_values <- data2$CNTSTUID  
+    
+    # 在 data1 中找到与 data2 中相同 CNTSTUID 的整行数据  
+    matched_rows <- data1 %>%  
+      filter(CNTSTUID %in% cntstuid_values)  
+    
+    # 使用 match() 函数确保按 data2 中 CNTSTUID 的顺序排列  
+    matched_rows <- matched_rows[match(cntstuid_values, matched_rows$CNTSTUID), ]  
+    
+    # 将提取的行添加到 data2 的后面  
+    data2_extended <- bind_cols(data2, matched_rows)  
+    
+    # 打印出合并后的数据框的前几行以确认结果  
+    print(head(data2_extended))  
+} else {  
+    print("CNTSTUID 在数据中未找到！")  
+}
+```
+
+
+```{r 合并创造性思维、学生、家庭、学校数据}
+# 假设 data2_extended 和 data4 已经被读取并存在  
+
+# 进行合并，使用 data2_extended 中的 CNTSCHID...3 和 data4 中的 CNTSCHID 进行连接  
+merged_data <- merge(data2_extended, data4, by.x = "CNTSCHID...2", by.y = "CNTSCHID", all.x = TRUE)  
+
+# 输出合并后的数据框  
+print(merged_data)
+```
+
+
+```{r 提取澳门数据}
+# 安装并加载dplyr包
+library(dplyr)
+
+# 筛选数据
+data6 <- merged_data %>%
+  filter(CNTRYID == "Macao (China)")
+
+# 查看筛选后的数据
+head(data6)
+```
+
+
+```{r 检验缺失值}
+# 假设你的数据集名为data6
+# 检查每列中NA的数量
+na_counts <- colSums(is.na(data6))
+
+# 找出包含至少一个NA的变量名
+vars_with_na <- names(na_counts[na_counts > 0])
+
+# 输出包含NA的变量名及其对应的NA数量
+result <- data.frame(
+  Variable = vars_with_na,
+  NA_Count = na_counts[na_counts > 0]
+)
+
+print(result)
+```
+
+```{r 删除缺失值}
+# 复制数据集data6为data7
+data7 <- data6
+ 
+# 找出除了IMAGINE之外的所有变量名
+vars_to_check <- setdiff(names(data7), "IMAGINE")
+ 
+# 对这些变量进行缺失值检查，并删除含有缺失值的行
+data7_clean <- data7[complete.cases(data7[, vars_to_check]), ]
+ 
+# 输出新的数据集
+print(head(data7_clean))  # 这里只打印前几行作为示例，你可以根据需要查看整个数据集
+
+```
+
+
+
+
+```{r 澳门各学校频数}
+# 如果CNTSCHID...2确实是变量名
+table_result <- table(data6$CNTSCHID...2)
+ 
+# 打印结果
+print(table_result)
+```
+
+
++无条件均值模型
+
+```{r 零模型1}
+library(lme4)
+zero_model <- lmer(PV1CRTH_NC ~ 1 + (1 | CNTSCHID...2), data = data7_clean)
+summary(zero_model)
+```
+
+
+```{r 零模型（2）}
+library(lme4)
+zero_model <- lmer(PV1CRTH_NC ~  (1 | CNTSCHID...2), data = data7_clean)
+summary(zero_model)
+```
+
+
+```{r}
+re1 <- summary(zero_model)
+```
+
+
+```{r 各学校残差图}
+library(lattice)
+bwplot(CNTSCHID...2 ~ resid(zero_model), data7_clean)
+```
+
+
+```{r}
+library(lattice)
+
+# 确保zero_model已经被定义为一个有效的模型，并且可以从中提取残差
+# 假设SchoolID是你想要用来分组的变量
+
+# 提取残差
+residuals <- resid(zero_model)
+
+# 将残差添加到merged_data数据框中（如果它们不在同一个数据框中）
+# 注意：这里假设residuals的长度与merged_data中的行数相匹配
+merged_data$Residuals <- residuals
+
+# 使用bwplot绘制箱线图
+# 注意：这里使用~操作符来指定公式，左侧是Y轴变量，右侧是X轴变量（分组变量）
+bwplot(Residuals ~ CNTSCHID...2, data = merged_data, xlab = "CNTSCHID...2", ylab = "Residuals")
+```
+
+
+```{r 各学校平均值}
+with(data7_clean, tapply(PV1CRTH_NC, CNTSCHID...2, mean))
+```
+
+
+```{r 各学校截距}
+coef(zero_model)
+```
+
+```{r}
++ 固定斜率，固定截距
+```
+
+
+```{r}
+summary(lm(PV1CRTH_NC ~ CURIOAGR, data7_clean))
+```
+
+
+```{r,fig.height=5}
+fit.int <- lm(lm(PV1CRTH_NC ~ CURIOAGR, data7_clean))
+plot(data7_clean$CURIOAGR,data7_clean$PV1CRTH_NC)
+abline(fit.int) 
+```
+
+```{r + 固定斜率，随机截距}
+
+```
+
+
+
+```{r 好奇心}
+data7_clean$CURIOAGR <- as.numeric(as.character(data7_clean$CURIOAGR))
+hlm.1 <- lmer(PV1CRTH_NC ~ CURIOAGR + (1|CNTSCHID...2), data7_clean)
+summary(hlm.1)
+```
+
+```{r}
+anova(zero_model, hlm.1)
+```
+
+
+```{r 个人特质}
+# 定义一个变量名的向量
+vars_to_convert <- c("CREATEFF", "IMAGINE", "CURIOAGR", "CREATOP", "OPENART", "GROSAGR", "EFFORT1", "PERSEVAGR")
+
+# 使用lapply()函数遍历这些变量，并进行数值转换
+data7_clean[vars_to_convert] <- lapply(data7_clean[vars_to_convert], function(x) as.numeric(as.character(x)))
+
+# 现在可以拟合线性混合模型了
+hlm.2 <- lmer(PV1CRTH_NC ~ CREATEFF+CURIOAGR+CREATOP+OPENART+GROSAGR+EFFORT1+PERSEVAGR+(1|CNTSCHID...2), data = data7_clean)
+
+# 查看模型摘要
+summary(hlm.2)
+```
+好奇心、对艺术的开放性、任务投入程度
+
+```{r}
+anova(hlm.1, hlm.2)
+```
+
+```{r 个人特质和学业素养}
+# 定义一个变量名的向量
+vars_to_convert <- c("CREATEFF",  "CURIOAGR", "CREATOP", "OPENART", "GROSAGR", "EFFORT1", "PV1MATH", "PV1READ", "PV1SCIE", "PERSEVAGR")
+
+# 使用lapply()函数遍历这些变量，并进行数值转换
+data7_clean[vars_to_convert] <- lapply(data7_clean[vars_to_convert], function(x) as.numeric(as.character(x)))
+
+# 现在可以拟合线性混合模型了
+hlm.3 <- lmer(PV1CRTH_NC ~ CREATEFF+CURIOAGR+CREATOP+OPENART+GROSAGR+EFFORT1+PERSEVAGR+PV1MATH+PV1READ+PV1SCIE+(1|CNTSCHID...2), data = data7_clean)
+
+# 查看模型摘要
+summary(hlm.3)
+```
+对艺术的开放性、任务投入程度、学业表现
+
+
+```{r}
+anova(hlm.2, hlm.3)
+```
+
+```{r 个人、家庭}
+# 定义一个变量名的向量
+vars_to_convert <- c("CREATEFF",  "CURIOAGR", "CREATOP", "OPENART", "GROSAGR", "EFFORT1", "PV1MATH", "PV1READ", "PV1SCIE", "PERSEVAGR", "CREATHME", "CREATOPN", "CREATOR", "ESCS", "CREATFAM")
+
+# 使用lapply()函数遍历这些变量，并进行数值转换
+data7_clean[vars_to_convert] <- lapply(data7_clean[vars_to_convert], function(x) as.numeric(as.character(x)))
+
+# 现在可以拟合线性混合模型了
+hlm.7 <- lmer(PV1CRTH_NC ~ CREATEFF+CURIOAGR+CREATOP+OPENART+GROSAGR+EFFORT1+PERSEVAGR+PV1MATH+PV1READ+PV1SCIE+CREATHME+CREATOPN+CREATOR+ESCS+CREATFAM+(1|CNTSCHID...2), data = data7_clean)
+
+# 查看模型摘要
+summary(hlm.7)
+
+```
+对艺术的开放性、任务投入程度、学业表现、家庭经济社会地位
+
+
+```{r}
+anova(hlm.3, hlm.7)
+```
+
+
+```{r 协方差阵}
+vcov_matrix <- vcov(hlm.7)
+print(vcov_matrix)
+```
+
+```{r 学校环境}
+# 定义一个变量名的向量
+vars_to_convert <- c("CREATEFF",  "CURIOAGR", "CREATOP", "OPENART", "GROSAGR", "EFFORT1", "PV1MATH", "PV1READ", "PV1SCIE", "PERSEVAGR", "CREATHME", "CREATOPN", "CREATOR", "ESCS", "CREATFAM", "CREENVSC", "OPENCUL", "ACTCRESC", "BCREATSC", "CREATSCH", "CREATAS")
+
+# 使用lapply()函数遍历这些变量，并进行数值转换
+data7_clean[vars_to_convert] <- lapply(data7_clean[vars_to_convert], function(x) as.numeric(as.character(x)))
+
+# 现在可以拟合线性混合模型了
+hlm.8 <- lmer(PV1CRTH_NC ~ CREATEFF+CURIOAGR+CREATOP+OPENART+GROSAGR+EFFORT1+PERSEVAGR+PV1MATH+PV1READ+PV1SCIE+CREATHME+CREATOPN+CREATOR+ESCS+CREATFAM+CREENVSC+OPENCUL+ACTCRESC+BCREATSC+CREATSCH+CREATAS+
+                (1|CNTSCHID...2), data = data7_clean)
+
+# 查看模型摘要
+summary(hlm.8)
+```
+CREACTIV是分类变量
+```{r}
+anova(hlm.7, hlm.8)
+```
+学校学生的创造性思维影响并不显著。
+
+
+```{r}
+coef(hlm.1)
+```
+
+
+```{r,echo = FALSE,fig.height=5}
+with(hlm.1, {
+  cc <- coef(hlm.1)$CNTSCHID...2
+  xyplot(PV1CRTH_NC ~ CURIOAGR | CNTSCHID...2, data = data7_clean,
+    index.cond = function(x, y) coef(lm(y ~ x))[1],
+    panel = function(x, y, groups, subscripts, ...) {
+      panel.grid(h = -1, v = -1)
+      panel.points(x, y, ...)
+      subj <- as.character(data7_clean$CNTSCHID...2[subscripts][1])
+      panel.abline(cc[subj,1], cc[subj, 2])                   
+    })
+})
+```
+
+
+
+
+```{r + 随机斜率，固定截距}
+
+```
+
+
+```{r}
+hlm.5 <- lmer(PV1CRTH_NC ~ CURIOAGR + (0 + CURIOAGR|CNTSCHID...2), data7_clean)
+summary(hlm.5)
+```
+
+
+```{r}
+coef(hlm.5)
+```
+
+
+```{r,echo = FALSE,fig.height=5}
+with(hlm.5, {
+  cc <- coef(hlm.5)$Subject
+  xyplot(Reaction ~ Days | CNTSCHID...2, data = sleepstudy,
+    index.cond = function(x, y) coef(lm(y ~ x))[1],
+    panel = function(x, y, groups, subscripts, ...) {
+      panel.grid(h = -1, v = -1)
+      panel.points(x, y, ...)
+      subj <- as.character(sleepstudy$Subject[subscripts][1])
+      panel.abline(cc[subj,1], cc[subj, 2])                   
+    })
+})
+```
+
+
++ 随机斜率，随机截距
+
+```{r}
+hlm.6 <- lmer(PV1CRTH_NC ~ CURIOAGR + (1+CURIOAGR|CNTSCHID...2), data7_clean)
+summary(hlm.6)
+```
+
+
+```{r}
+coef(hlm.2)
+```
+
+
+```{r,echo = FALSE,fig.height=5}
+with(hlm.2, {
+  cc <- coef(hlm.2)$Subject
+  xyplot(Reaction ~ Days | Subject, data = sleepstudy,
+    index.cond = function(x, y) coef(lm(y ~ x))[1],
+    panel = function(x, y, groups, subscripts, ...) {
+      panel.grid(h = -1, v = -1)
+      panel.points(x, y, ...)
+      subj <- as.character(sleepstudy$Subject[subscripts][1])
+      panel.abline(cc[subj,1], cc[subj, 2])                   
+    })
+})
+```
+
+
+
+
+
+
+
+```{r r中读取数据保存为sav文件}
+library(haven)
+write_sav(merged_data, "C:\\Users\\王振\\Desktop\\merged_data.sav")
+```
+
+
+```{r 逐步回归法}
+# 加载必要的库（如果尚未加载）
+# 通常stepAIC()函数在MASS库中，但它在base R的stats包中也可用
+library(MASS) # 如果你的R版本中没有默认包含MASS库，则需要取消注释并安装/加载它
+library(car)
+
+# 假设data7_clean已经加载到你的R环境中
+
+# 定义自变量和因变量
+predictors <- c("CREATEFF",  "CURIOAGR", "CREATOP", "OPENART", "GROSAGR", "EFFORT1", "PERSEVAGR")
+response <- "PV1CRTH_NC"
+
+# 构建初始的全模型
+full_model <- lm(as.formula(paste(response, "~ .")), data = data7_clean[, c(response, predictors), drop = FALSE])
+
+vif_values <- vif(full_model)
+print(vif_values)
+
+# 使用逐步回归法筛选变量
+stepwise_model <- stepAIC(full_model, direction = "both") # direction可以是"forward"（只添加变量）、"backward"（只删除变量）或"both"（同时添加和删除）
+
+# 打印逐步回归模型的摘要
+summary(stepwise_model)
+```
