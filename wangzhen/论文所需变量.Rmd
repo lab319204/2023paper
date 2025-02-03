@@ -1,0 +1,70 @@
+---
+title: '1.25'
+author: "王振"
+date: "2025-01-25"
+output: html_document
+---
+
+```{r}
+# 加载haven包
+library(haven)
+
+# 读取原始的.sav文件
+# 假设原始文件名为"original_data.sav"
+original_data <- read_sav("C:\\Users\\王振\\Desktop\\CY08MSP_STU_QQQ.SAV")
+
+# 定义要提取的变量名列表
+# 注意：在R中，变量名不应该包含中文标点符号，如顿号（、）。这里我假设你已经将它们替换为英文逗号。
+variables_to_keep <- c("PV1MATH", "PV1READ", "PV1SCIE", "CREATEFF", "IMAGINE", "CURIOAGR", 
+                       "CREATOP", "OPENART", "PERSEVAGR", "EFFORT1", "GROSAGR", "CREATSCH", 
+                       "CREATFAM", "CREATAS", "CREATOOS", "CREATHME", "CREATOPN", "CREATOR", "ESCS", 
+                       "CREATACT", "CNTSTUID", "CNTSCHID", "ST004D01T", "CNTRYID")
+
+# 选择这些变量
+new_data <- original_data[, variables_to_keep, drop = FALSE]
+
+# 将新的数据集保存为一个新的.sav文件
+# 假设新文件名为"new_data.sav"
+write_sav(new_data, "C:\\Users\\王振\\Desktop\\CY08MSP_STU_QQQ副本.SAV")
+```
+
+```{r}
+# 加载haven包
+library(haven)
+
+# 读取原始的.sav文件
+# 假设原始文件名为"original_data.sav"
+original_data <- read_sav("C:\\Users\\王振\\Desktop\\CY08MSP_CRT_COG.SAV")
+
+# 定义要提取的变量名列表
+# 注意：在R中，变量名不应该包含中文标点符号，如顿号（、）。这里我假设你已经将它们替换为英文逗号。
+variables_to_keep <- c("CNTSTUID", "CNTSCHID", "PV1CRTH_NC")
+
+# 选择这些变量
+new_data <- original_data[, variables_to_keep, drop = FALSE]
+
+# 将新的数据集保存为一个新的.sav文件
+# 假设新文件名为"new_data.sav"
+write_sav(new_data, "C:\\Users\\王振\\Desktop\\CY08MSP_CRT_COG副本.SAV")
+```
+
+
+```{r}
+# 加载haven包
+library(haven)
+
+# 读取原始的.sav文件
+# 假设原始文件名为"original_data.sav"
+original_data <- read_sav("C:\\Users\\王振\\Desktop\\CY08MSP_SCH_QQQ.SAV")
+
+# 定义要提取的变量名列表
+# 注意：在R中，变量名不应该包含中文标点符号，如顿号（、）。这里我假设你已经将它们替换为英文逗号。
+variables_to_keep <- c("CREACTIV", "CREENVSC", "OPENCUL", "ACTCRESC", "BCREATSC", "CNTSCHID")
+
+# 选择这些变量
+new_data <- original_data[, variables_to_keep, drop = FALSE]
+
+# 将新的数据集保存为一个新的.sav文件
+# 假设新文件名为"new_data.sav"
+write_sav(new_data, "C:\\Users\\王振\\Desktop\\CY08MSP_SCH_QQQ副本.SAV")
+```
