@@ -1,0 +1,227 @@
+---
+title: "多层次线性模型-固定斜率"
+author: "王振"
+date: "2025-03-19"
+output: html_document
+---
+
+---
+title: "创造性思维1"
+author: "王振"
+date: "2025-01-25"
+output: html_document
+---
+
+
+```{r 读取数据}
+final_data <- 非教师数据
+final_data <- final_data %>% rename(CNTSCHID = CNTSCHID...1)
+```
+
+
+
+```{r 均值化}
+# 假设 final_data 是你的数据框
+# 定义需要排除的变量
+exclude_vars <- c("CNTSCHID", "CNTSTUID...2", "CNTSTUID...20", "CNTSCHID...21", "ST004D01T", "CNTRYID")
+
+# 获取需要操作的变量名
+vars_to_operate <- setdiff(names(final_data), exclude_vars)
+
+# 对每个变量进行操作，并替换原来的变量
+for (var in vars_to_operate) {
+  # 假设你要减去某个均值（例如该变量的均值）
+  final_data[[var]] <- final_data[[var]] - mean(final_data[[var]], na.rm = TRUE)
+}
+
+# 查看结果
+head(final_data)
+```
+
+
+
++无条件均值模型
+
+```{r 组内相关系数检验}
+library(ICC)
+ICCest(CNTSCHID, PV1CRTH_NC,final_data, alpha = 0.05, CI.type = "THD")
+ICCbare(CNTSCHID, PV1CRTH_NC,final_data)
+```
+
+
+```{r 零模型}
+library(lme4)
+model.0 <- lmer(PV1CRTH_NC ~ 1 + (1 | CNTSCHID), data = final_data)
+summary(model.0)
+```
+
+
++ 固定斜率，随机截距
+
+```{r 学业表现}
+
+# 现在可以拟合线性混合模型了
+hlm.1 <- lmer(PV1CRTH_NC ~ PV1MATH+PV1READ+PV1SCIE+(1|CNTSCHID), data = final_data)
+
+# 查看模型摘要
+summary(hlm.1)
+```
+学业变量均保留
+
+
+
+```{r 模型比较}
+anova(model.0, hlm.1)
+```
+
+
+```{r 非认知因素和学业表现}
+
+
+# 现在可以拟合线性混合模型了
+hlm.2 <- lmer(PV1CRTH_NC ~ CURIOAGR+CREATOP+OPENART+GROSAGR+EFFORT1+PERSEVAGR+IMAGINE+PV1MATH+PV1READ+PV1SCIE+(1|CNTSCHID), data = final_data)
+
+# 查看模型摘要
+summary(hlm.2)
+```
+保留学业变量、对艺术开放性、好奇心、想象力和冒险精神
+
+
+```{r 非认知因素和学业表现(保留变量)}
+
+
+# 现在可以拟合线性混合模型了
+hlm.2.1 <- lmer(PV1CRTH_NC ~ OPENART+CURIOAGR+IMAGINE+PV1MATH+PV1READ+PV1SCIE+(1|CNTSCHID), data = final_data)
+
+# 查看模型摘要
+summary(hlm.2.1)
+```
+
+
+```{r}
+anova(hlm.1, hlm.2.1)
+```
+
+
+```{r 学业+非认知因素+CT态度}
+
+# 现在可以拟合线性混合模型了
+hlm.3 <- lmer(PV1CRTH_NC ~ CREATEFF+OPENART+CURIOAGR+IMAGINE+PV1MATH+PV1READ+PV1SCIE+(1|CNTSCHID), data = final_data)
+
+# 查看模型摘要
+summary(hlm.3)
+```
+
+
+```{r}
+anova(hlm.2.1, hlm.3)
+```
+CT自我效能感显著
+
+
+
+```{r 学业+非认知因素+CT态度+个人参加校外活动}
+# 现在可以拟合线性混合模型了
+hlm.4 <- lmer(PV1CRTH_NC ~ CREATEFF+OPENART+CURIOAGR+IMAGINE+PV1MATH+PV1READ+PV1SCIE+CREATOOS+(1|CNTSCHID), data = final_data)
+
+# 查看模型摘要
+summary(hlm.4)
+```
+
+
+```{r}
+anova(hlm.3, hlm.4)
+```
+
+
+```{r 个人+ESCS}
+
+
+# 现在可以拟合线性混合模型了
+hlm.5 <- lmer(PV1CRTH_NC ~ ESCS+CREATEFF+OPENART+CURIOAGR+IMAGINE+PV1MATH+PV1READ+PV1SCIE+CREATOOS+(1|CNTSCHID), data = final_data)
+
+# 查看模型摘要
+summary(hlm.5)
+
+```
+对艺术的开放性、好奇心、想象力和冒险精神、学业表现、家庭经济社会地位、参加校外活动
+
+
+```{r}
+anova(hlm.5, hlm.4)
+```
+ESCS有显著性差异，保留
+
+
+
+
+
+```{r 个人+ESCS+学校态度}
+# 现在可以拟合线性混合模型了
+hlm.6 <- lmer(PV1CRTH_NC ~ ESCS+CREATEFF+OPENART+CURIOAGR+IMAGINE+PV1MATH+PV1READ+PV1SCIE+BCREATSC+CREATOOS + (1|CNTSCHID), data = final_data)
+
+# 查看模型摘要
+summary(hlm.6)
+```
+
+
+```{r}
+anova(hlm.6, hlm.5)
+```
+模型无显著性差异，学校态度不显著
+
+
+```{r 计算方差}
+zero_varcorr <- VarCorr(zero_model)
+hlm_varcorr <- VarCorr(hlm.6)
+
+zero_between_var <- zero_varcorr[[1]][1, 1]^2  
+hlm_between_var <- hlm_varcorr[[1]][1, 1]^2    
+
+# 计算方差解释的比例
+variance_explained <- 1 - (hlm_between_var / zero_between_var)
+
+# 打印结果
+cat("方差解释的比例（近似，组间）:", variance_explained, "\n")
+```
+
+
+
+
+
+```{r 个人+ESCS+学校环境}
+
+
+# 现在可以拟合线性混合模型了
+
+hlm.7 <- lmer(PV1CRTH_NC ~ ESCS+CREATEFF+OPENART+CURIOAGR+IMAGINE+PV1MATH+PV1READ+PV1SCIE+CREACTIV+CREENVSC+OPENCUL+ACTCRESC+CREATFAM+CREATAS+CREATOOS +(1|CNTSCHID), data = final_data)
+
+
+# 查看模型摘要
+summary(hlm.7)
+```
+
+```{r 个人+ESCS+学校环境(保留变量)}
+
+
+# 现在可以拟合线性混合模型了
+
+hlm.7.1 <- lmer(PV1CRTH_NC ~ ESCS+CREATEFF+OPENART+CURIOAGR+IMAGINE+PV1MATH+PV1READ+PV1SCIE+CREENVSC+CREATOOS+(1|CNTSCHID), data = final_data)
+
+
+# 查看模型摘要
+summary(hlm.7.1)
+```
+
+```{r}
+anova(hlm.7.1, hlm.5)
+```
+创造性学校环境和参加校外活动
+
+
+学业变量+对艺术开放性+好奇心+想象力和冒险精神+ESCS+自我效能感+（参加校外创造性活动+学校创造性环境）负面影响
+
+```{r}
+install.packages(c("Rcpp", "RcppArmadillo", "MASS", "optmatch", "cobalt"))
+```
+
