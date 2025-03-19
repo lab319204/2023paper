@@ -1,0 +1,542 @@
+---
+title: "数据读取和数据预处理"
+author: "王振"
+date: "2025-03-19"
+output: html_document
+---
+
+
+
+```{r 读取学生、家庭、创造性思维、教师和学校数据}
+library(foreign)
+ 
+# 定义文件路径
+file1_path <- "CY08MSP_STU_QQQ副本.SAV"
+file2_path <- "CY08MSP_CRT_COG副本.SAV"
+file3_path <- "CY08MSP_TCH_QQQ.SAV"
+file4_path <- "CY08MSP_SCH_QQQ副本.SAV"
+ 
+# 读取SPSS文件
+data1 <- read.spss(file1_path, to.data.frame = TRUE)  # to.data.frame = TRUE 是默认的，但可以明确写出
+data2 <- read.spss(file2_path, to.data.frame = TRUE)
+data3 <- read.spss(file3_path, to.data.frame = TRUE)  # to.data.frame = TRUE 是默认的，但可以明确写出
+data4 <- read.spss(file4_path, to.data.frame = TRUE)
+ 
+```
+
+
+```{r 合并学生、家庭、创造性思维数据}
+library(dplyr)  
+# 确保 CNTSTUID 在 data1 和 data2 中存在  
+if ("CNTSTUID" %in% names(data1) & "CNTSTUID" %in% names(data2)) {  
+  
+    # 提取 data2 中的 CNTSTUID 值  
+    cntstuid_values <- data2$CNTSTUID  
+    
+    # 在 data1 中找到与 data2 中相同 CNTSTUID 的整行数据  
+    matched_rows <- data1 %>%  
+      filter(CNTSTUID %in% cntstuid_values)  
+    
+    # 使用 match() 函数确保按 data2 中 CNTSTUID 的顺序排列  
+    matched_rows <- matched_rows[match(cntstuid_values, matched_rows$CNTSTUID), ]  
+    
+    # 将提取的行添加到 data2 的后面  
+    data2_extended <- bind_cols(data2, matched_rows)  
+    
+    # 打印出合并后的数据框的前几行以确认结果  
+    print(head(data2_extended))  
+} else {  
+    print("CNTSTUID 在数据中未找到！")  
+}
+```
+
+
+```{r 合并学生、家庭、创造性思维、学校数据}
+# 假设 data2_extended 和 data4 已经被读取并存在  
+
+# 进行合并，使用 data2_extended 中的 CNTSCHID...3 和 data4 中的 CNTSCHID 进行连接  
+merged_data <- merge(data2_extended, data4, by.x = "CNTSCHID...2", by.y = "CNTSCHID", all.x = TRUE)  
+
+# 输出合并后的数据框  
+print(merged_data)
+```
+
+
+```{r 合并数据副本}
+merged_data1 <- merged_data
+```
+
+
+```{r 删除74条性别缺失的变量}
+# 删除 ST004D01T 变量为缺失值的行
+merged_data2 <- merged_data1 %>%
+  filter(!is.na(ST004D01T))
+
+# 查看结果
+head(merged_data2)
+```
+
+```{r 非教师数据缺失值检验(所有地区)}
+
+ 
+# 使用 sapply() 函数来计算每个变量的缺失值数量
+missing_values_per_variable <- sapply(merged_data2, function(x) sum(is.na(x)))
+ 
+# 打印每个变量的缺失值数量
+print(missing_values_per_variable)
+ 
+# 为了计算缺失值比例，我们需要知道每个变量的总观测数（即行数，假设每列都有相同的观测数）
+total_observations <- nrow(merged_data2)
+ 
+# 计算每个变量的缺失值比例
+missing_ratio_per_variable <- sapply(merged_data2, function(x) sum(is.na(x)) / total_observations)
+ 
+# 将结果转换为更友好的数据框格式
+missing_values_df <- data.frame(
+  Variable = names(missing_values_per_variable),
+  MissingCount = as.numeric(missing_values_per_variable),
+  MissingRatio = round(missing_ratio_per_variable, 4) # 保留四位小数来展示缺失值比例
+)
+
+# 打印排序后的结果
+print(missing_values_df)
+```
+
+
+其次，CREATHME、CREATOPN、CREATOR、CREATACT四个变量缺失比例均超过80%，直接剔除，保存为新数据为merged_data3
+
+
+```{r 剔除缺失值比例高的变量}
+# 使用 subset() 函数排除指定变量
+merged_data3 <- subset(merged_data2, select = -c(CREATHME, CREATOPN, CREATOR, CREATACT))
+
+# 或者直接通过列名排除
+merged_data3 <- merged_data2[, !names(merged_data2) %in% c("CREATHME", "CREATOPN", "CREATOR", "CREATACT")]
+```
+
+
+
+```{r 数值转化}
+# 定义一个变量名的向量
+vars_to_convert <- c("CREATEFF",  "CURIOAGR", "CREATOP", "OPENART", "GROSAGR", "EFFORT1", "PV1MATH","IMAGINE", "PV1READ", "PV1SCIE", "PERSEVAGR",  "ESCS", "CREATFAM", "CREENVSC",  "OPENCUL","ACTCRESC", "BCREATSC", "CREATSCH", "CREATAS", "CREATOOS")
+
+# 使用lapply()函数遍历这些变量，并进行数值转换
+merged_data3[vars_to_convert] <- lapply(merged_data3[vars_to_convert], function(x) as.numeric(as.character(x)))
+```
+
+
+```{r 非完全缺失数据按学校内部均值插补}
+library(dplyr)
+
+# 定义一个函数来计算众数
+get_mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+merged_data4 <- merged_data3 %>%
+  group_by(`CNTSCHID...2`) %>%  # 按 CNTSCHID...2 分组
+  mutate(across(c(ESCS, CREENVSC, OPENCUL), ~ ifelse(  # 对 ESCS, CREENVSC, OPENCUL 使用组内均值插补
+    is.na(.x),
+    if (sum(!is.na(.x)) > 0) {  # 检查组内是否有非缺失值
+      mean(.x, na.rm = TRUE)    # 如果有，用组内均值插补
+    } else {
+      .x                        # 如果全缺失，保持 NA 不变
+    },
+    .x                          # 非缺失值保持不变
+  ))) %>%
+  mutate(CREACTIV = ifelse(  # 对 CREACTIV 使用众数插补
+    is.na(CREACTIV),
+    if (sum(!is.na(CREACTIV)) > 0) {  # 检查组内是否有非缺失值
+      get_mode(CREACTIV[!is.na(CREACTIV)])  # 如果有，用组内众数插补
+    } else {
+      CREACTIV  # 如果全缺失，保持 NA 不变
+    },
+    CREACTIV  # 非缺失值保持不变
+  )) %>%
+  ungroup()
+
+# 验证插补结果
+summary(merged_data4[c("ESCS", "CREACTIV", "CREENVSC", "OPENCUL")])
+```
+
+
+```{r 剩下缺失数据进行全局的均值和众数插补}
+library(dplyr)
+
+# 定义计算众数的函数
+get_mode <- function(x) {
+  ux <- unique(na.omit(x))  # 忽略缺失值
+  if (length(ux) == 0) NA else ux[which.max(tabulate(match(x, ux)))]
+}
+
+# 计算三个变量的全局均值 + CREACTIV 的全局众数
+global_means <- merged_data3 %>%
+  summarise(across(c(ESCS, CREENVSC, OPENCUL), ~ mean(.x, na.rm = TRUE)))
+
+global_mode <- merged_data3 %>% 
+  summarise(CREACTIV = get_mode(CREACTIV))  # 计算 CREACTIV 的全局众数
+
+# 对四个变量分别插补
+merged_data5 <- merged_data4 %>%
+  mutate(
+    across(c(ESCS, CREENVSC, OPENCUL), ~ ifelse(
+      is.na(.x),
+      global_means[[cur_column()]],  # 提取全局均值
+      .x
+    )),
+    CREACTIV = ifelse(
+      is.na(CREACTIV),
+      global_mode$CREACTIV,
+      CREACTIV
+    )
+  )
+
+# 验证结果
+summary(merged_data5[c("ESCS", "CREACTIV", "CREENVSC", "OPENCUL")])
+```
+
+```{r 删除在剩下所有指定变量上存在缺失值的数据}
+# 加载必要的包
+library(dplyr)
+
+# 定义需要检查的变量列表
+variables_to_check <- c("CREATEFF", "CURIOAGR", "CREATOP", "OPENART", "BCREATSC", 
+                        "EFFORT1", "PERSEVAGR", "IMAGINE", "GROSAGR", "CREATSCH", 
+                        "CREATFAM", "CREATAS", "CREATOOS", "ACTCRESC")
+
+# 检查每一行是否在所有指定变量上均存在缺失值
+# 如果一行在所有指定变量上均存在缺失值，则标记为 TRUE
+rows_all_missing <- rowSums(is.na(merged_data5[, variables_to_check])) == length(variables_to_check)
+
+# 删除那些在所有指定变量上均存在缺失值的行
+merged_data6 <- merged_data5[!rows_all_missing, ]
+
+# 查看新数据集的结构
+str(merged_data6)
+
+# 查看删除的行数
+cat("删除了", sum(rows_all_missing), "行数据。\n")
+
+
+```
+
+```{r 复制数据集}
+merged_data7 <- merged_data6
+```
+
+```{r 插补20%至30%的变量}
+library(norm)  # 加载 norm 包
+
+# 假设 merged_data7 是你的数据框
+# 提取需要插补的变量并转换为矩阵
+variables_to_impute <- c("CREATEFF", "CURIOAGR", "CREATOP", "OPENART", "BCREATSC",  
+                         "EFFORT1", "PERSEVAGR", "IMAGINE", "GROSAGR", "CREATSCH", 
+                         "CREATFAM", "CREATAS", "CREATOOS", "ACTCRESC")
+
+data <- as.matrix(merged_data7[, variables_to_impute])
+
+# 查看原始数据
+print("原始数据：")
+print(data)
+
+# 数据预处理
+preprocessed_data <- prelim.norm(data)
+
+# 运行 EM 算法
+em_result <- em.norm(preprocessed_data)
+
+# 获取插补后的参数
+imputed_data <- getparam.norm(preprocessed_data, em_result)
+
+# 提取均值和协方差矩阵
+mu <- imputed_data$mu
+sigma <- imputed_data$sigma
+
+# 计算条件期望并填充缺失值
+completed_data <- data  # 复制原始数据
+for (i in 1:nrow(data)) {
+  missing_cols <- is.na(data[i, ])  # 找到缺失值的位置
+  if (any(missing_cols)) {
+    # 找到已知值的位置
+    known_cols <- !missing_cols
+    
+    # 如果已知值数量为 0，跳过该行
+    if (sum(known_cols) == 0) {
+      next
+    }
+    
+    # 提取已知值的均值和协方差
+    mu_known <- mu[known_cols]
+    mu_missing <- mu[missing_cols]
+    sigma_known <- sigma[known_cols, known_cols, drop = FALSE]  # 确保是矩阵
+    sigma_missing_known <- sigma[missing_cols, known_cols, drop = FALSE]  # 确保是矩阵
+    
+    # 检查 sigma_known 是否可逆
+    if (nrow(sigma_known) == 0 || ncol(sigma_known) == 0) {
+      warning(paste("无法计算条件期望：第", i, "行的协方差矩阵为空。"))
+      next
+    }
+    
+    if (nrow(sigma_known) == 1 && ncol(sigma_known) == 1) {
+      # 如果是 1x1 矩阵，直接检查是否为 0
+      if (sigma_known[1, 1] == 0) {
+        warning(paste("无法计算条件期望：第", i, "行的协方差矩阵不可逆。"))
+        next
+      }
+    } else {
+      # 如果是更大的矩阵，检查行列式是否为 0
+      tryCatch({
+        if (det(sigma_known) == 0) {
+          warning(paste("无法计算条件期望：第", i, "行的协方差矩阵不可逆。"))
+          next
+        }
+      }, error = function(e) {
+        warning(paste("无法计算条件期望：第", i, "行的协方差矩阵不可逆。错误信息：", e$message))
+        next
+      })
+    }
+    
+    # 计算条件期望
+    conditional_expectation <- mu_missing + sigma_missing_known %*% solve(sigma_known) %*% (data[i, known_cols] - mu_known)
+    
+    # 填充缺失值
+    completed_data[i, missing_cols] <- conditional_expectation
+  }
+}
+
+# 将插补后的数据直接替换原始数据中的缺失值
+merged_data7[, variables_to_impute] <- completed_data
+
+# 查看插补后的数据
+print("插补后的数据：")
+print(merged_data7[, variables_to_impute])
+```
+
+```{r 验证非教师数据是否还存在缺失值}
+# 使用 sapply() 函数来计算每个变量的缺失值数量
+missing_values_per_variable <- sapply(merged_data7, function(x) sum(is.na(x)))
+ 
+# 打印每个变量的缺失值数量
+print(missing_values_per_variable)
+ 
+# 为了计算缺失值比例，我们需要知道每个变量的总观测数（即行数，假设每列都有相同的观测数）
+total_observations <- nrow(merged_data7)
+ 
+# 计算每个变量的缺失值比例
+missing_ratio_per_variable <- sapply(merged_data7, function(x) sum(is.na(x)) / total_observations)
+ 
+# 将结果转换为更友好的数据框格式
+missing_values_df <- data.frame(
+  Variable = names(missing_values_per_variable),
+  MissingCount = as.numeric(missing_values_per_variable),
+  MissingRatio = round(missing_ratio_per_variable, 4) # 保留四位小数来展示缺失值比例
+)
+
+# 打印排序后的结果
+print(missing_values_df)
+```
+
+
+
+```{r 提取教师数据中所需变量}
+# 提取data3中的特定列并创建新的数据框
+data3.1 <- data3[, c("CNTRYID","CNTSCHID", "CNTTCHID", "CREATPED", "CREATVAL", "OPENCTTC")]
+```
+
+
+```{r 教师数据缺失值检验(所有地区)}
+
+ 
+# 使用 sapply() 函数来计算每个变量的缺失值数量
+missing_values_per_variable <- sapply(data3.1, function(x) sum(is.na(x)))
+ 
+# 打印每个变量的缺失值数量
+print(missing_values_per_variable)
+ 
+# 为了计算缺失值比例，我们需要知道每个变量的总观测数（即行数，假设每列都有相同的观测数）
+total_observations <- nrow(data3.1)
+ 
+# 计算每个变量的缺失值比例
+missing_ratio_per_variable <- sapply(data3.1, function(x) sum(is.na(x)) / total_observations)
+ 
+# 将结果转换为更友好的数据框格式
+missing_values_df <- data.frame(
+  Variable = names(missing_values_per_variable),
+  MissingCount = as.numeric(missing_values_per_variable),
+  MissingRatio = round(missing_ratio_per_variable, 4) # 保留四位小数来展示缺失值比例
+)
+
+# 打印排序后的结果
+print(missing_values_df)
+```
+
+```{r 教师数据数值转化}
+# 定义一个变量名的向量
+vars_to_convert <- c("CREATPED",  "CREATVAL", "OPENCTTC")
+
+# 使用lapply()函数遍历这些变量，并进行数值转换
+data3.1[vars_to_convert] <- lapply(data3.1[vars_to_convert], function(x) as.numeric(as.character(x)))
+```
+
+
+```{r 组内均值插补}
+library(dplyr)
+
+# 定义一个函数来计算众数
+get_mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# 对 data3.1 进行插补
+data3.2 <- data3.1 %>%
+  group_by(`CNTSCHID`) %>%  # 按 CNTSCHID...2 分组
+  mutate(across(c(CREATPED, CREATVAL, OPENCTTC), ~ ifelse(  # 对 CREATPED, CREATVAL, OPENCTTC 使用组内均值插补
+    is.na(.x),
+    if (sum(!is.na(.x)) > 0) {  # 检查组内是否有非缺失值
+      mean(.x, na.rm = TRUE)    # 如果有，用组内均值插补
+    } else {
+      .x                        # 如果全缺失，保持 NA 不变
+    },
+    .x                          # 非缺失值保持不变
+  ))) %>%
+  ungroup()
+
+# 验证插补结果
+summary(data3.2[c("CREATPED", "CREATVAL", "OPENCTTC")])
+```
+```{r 全局插补}
+library(dplyr)
+
+# 定义计算众数的函数
+get_mode <- function(x) {
+  ux <- unique(na.omit(x))  # 忽略缺失值
+  if (length(ux) == 0) NA else ux[which.max(tabulate(match(x, ux)))]
+}
+
+# 计算三个变量的全局均值
+global_means <- data3.1 %>%
+  summarise(across(c(CREATPED, CREATVAL, OPENCTTC), ~ mean(.x, na.rm = TRUE)))
+
+# 对三个变量分别插补
+data3.3 <- data3.2 %>%
+  mutate(
+    across(c(CREATPED, CREATVAL, OPENCTTC), ~ ifelse(
+      is.na(.x),
+      global_means[[cur_column()]],  # 提取全局均值
+      .x
+    ))
+  )
+
+# 验证结果
+summary(data3.3[c("CREATPED", "CREATVAL", "OPENCTTC")])
+```
+
+```{r 验证是否有缺失值}
+# 使用 sapply() 函数来计算每个变量的缺失值数量
+missing_values_per_variable <- sapply(data3.3, function(x) sum(is.na(x)))
+ 
+# 打印每个变量的缺失值数量
+print(missing_values_per_variable)
+ 
+# 为了计算缺失值比例，我们需要知道每个变量的总观测数（即行数，假设每列都有相同的观测数）
+total_observations <- nrow(data3.3)
+ 
+# 计算每个变量的缺失值比例
+missing_ratio_per_variable <- sapply(data3.3, function(x) sum(is.na(x)) / total_observations)
+ 
+# 将结果转换为更友好的数据框格式
+missing_values_df <- data.frame(
+  Variable = names(missing_values_per_variable),
+  MissingCount = as.numeric(missing_values_per_variable),
+  MissingRatio = round(missing_ratio_per_variable, 4) # 保留四位小数来展示缺失值比例
+)
+
+# 打印排序后的结果
+print(missing_values_df)
+```
+
+
+
+```{r 计算按学校分组的教师平均值}
+library(dplyr)
+
+data3.4 <- data3.3 %>%
+  group_by(CNTSCHID) %>%  # 按CNTSCHID分组
+  summarise(  # 计算统计量
+    avg_OPENCTTC = mean(OPENCTTC, na.rm = TRUE),  # OPENCTTC的平均值
+    avg_CREATPED = mean(CREATPED, na.rm = TRUE),  # CREATPED的平均值
+    avg_CREATVAL = mean(CREATVAL, na.rm = TRUE)   # CREATVAL的平均值
+  )
+
+# 查看data10的数据
+print(data3.4)
+```
+
+```{r 复制数据集}
+merged_data8 <- merged_data7
+data3.5 <- data3.4
+```
+
+
+```{r 保存数据集}
+library(haven)
+write_sav(data3.4, "教师数据.sav")
+write_sav(merged_data8, "非教师数据.sav")
+write_sav(final_data, "全部数据.sav")
+```
+
+
+
+```{r 非教师数据对应的学校数量}
+# 假设 merged_data8 是你的数据框
+unique_values <- unique(merged_data8$CNTSCHID)
+num_unique_values <- length(unique_values)
+
+# 输出结果
+print(num_unique_values)
+```
+
+```{r 教师数据对应学校数量}
+# 假设 merged_data8 是你的数据框
+unique_values <- unique(data3$CNTSCHID)
+num_unique_values <- length(unique_values)
+
+# 输出结果
+print(num_unique_values)
+```
+
+```{r 最终数据地区数量}
+# 假设 merged_data8 是你的数据框
+unique_values <- unique(final_data$CNTRYID)
+num_unique_values <- length(unique_values)
+
+# 输出结果
+print(num_unique_values)
+```
+
+
+
+```{r 合并数据}
+library(dplyr)
+
+# 假设data10和data_new是已经存在的数据集
+
+# 使用inner_join根据CNTSCHID和CNTSCHID...2连接两个数据框
+# 注意：我们需要将CNTSCHID...2重命名为CNTSCHID以便进行连接，或者指定by参数
+# 这里我们选择重命名以避免混淆
+merged_data8 <- merged_data8 %>% rename(CNTSCHID = CNTSCHID...2)
+
+final_data <- inner_join(merged_data8, data3.5, by = "CNTSCHID")
+
+# 查看连接后的数据
+print(final_data)
+```
+
+
+
+
+
+
+
